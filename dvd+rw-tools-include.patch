@@ -1,0 +1,11 @@
+diff -aurN dvd+rw-tools-7.1.orig/transport.hxx dvd+rw-tools-7.1/transport.hxx
+--- dvd+rw-tools-7.1.orig/transport.hxx	2008-04-20 08:18:50.000000000 +0200
++++ dvd+rw-tools-7.1/transport.hxx	2008-04-20 08:33:28.000000000 +0200
+@@ -16,6 +16,7 @@
+ #include <fcntl.h>
+ #include <poll.h>
+ #include <sys/time.h>
++#include <limits.h>
+ 
+ inline long getmsecs()
+ { struct timeval tv;

@@ -1,0 +1,227 @@
+diff -aurN dvd+rw-tools-7.1.orig/growisofs.1 dvd+rw-tools-7.1/growisofs.1
+--- dvd+rw-tools-7.1.orig/growisofs.1	2008-04-20 08:18:50.000000000 +0200
++++ dvd+rw-tools-7.1/growisofs.1	2008-04-20 08:31:23.000000000 +0200
+@@ -1,6 +1,6 @@
+ .TH GROWISOFS 1m "1 Mar 2008" "growisofs 7.1"
+ .SH NAME
+-growisofs \- combined mkisofs frontend/DVD recording program.
++growisofs \- combined genisoimage frontend/DVD recording program.
+ .SH SYNOPSIS
+ .B growisofs
+ [\fB\-dry\-run\fP]
+@@ -9,10 +9,10 @@
+ [\fB\-speed=1\fP]
+ \-[\fBZ|M\fP]
+ .I /dev/dvd
+-.I <mkisofs-options>
++.I <genisoimage-options>
+ 
+ .SH DESCRIPTION
+-\fBgrowisofs\fP was originally designed as a frontend to \fBmkisofs\fP
++\fBgrowisofs\fP was originally designed as a frontend to \fBgenisoimage\fP
+ to facilitate appending of data to ISO9660 volumes residing on
+ random-access media such as DVD+RW, DVD\-RAM, plain files, hard disk
+ partitions. In the course of development general purpose DVD recording
+@@ -35,7 +35,7 @@
+ Merge a new session to an existing one.
+ .TP
+ .BI \-version
+-Print version information and invoke \fBmkisofs\fP, also with \-version
++Print version information and invoke \fBgenisoimage\fP, also with \-version
+ option.
+ .TP
+ .BI \-dvd\-compat
+@@ -47,7 +47,7 @@
+ .BI \-dry\-run
+ At dry\-run \fBgrowisofs\fP performs all the steps till, but not
+ including the first write operation. Most notably check for "overburn"
+-condition is performed, which implies that mkisofs is invoked and
++condition is performed, which implies that genisoimage is invoked and
+ terminated prematurely.
+ .TP
+ .BI \-overburn
+@@ -68,8 +68,8 @@
+ recordings are commonly performed at ~1/2 of advertised speed, because
+ of defect management being in effect.
+ .TP
+-.BI <mkisofs-options>
+-More options can be found in the manpage for \fBmkisofs\fP.
++.BI <genisoimage-options>
++More options can be found in the manpage for \fBgenisoimage\fP.
+ 
+ .P
+ There are several undocumented options commonly denoted with
+@@ -82,7 +82,7 @@
+ need to use them directly can as well consult the source code or obtain
+ specific instructions elsewhere.
+ 
+-.SH DIFFERENCES WITH RUNNING MKISOFS DIRECTLY
++.SH DIFFERENCES WITH RUNNING GENISOIMAGE DIRECTLY
+ .P
+ When using growisofs you may not use the
+ .B \-o 
+@@ -99,13 +99,13 @@
+ Otherwise everything that applies to 
+ .I [multisession] 
+ mastering with 
+-.B mkisofs 
++.B genisoimage 
+ applies to 
+ .B growisofs 
+ as well. 
+ .B growisofs
+ needs at least 
+-.B mkisofs
++.B genisoimage
+ version 1.14, version 2.0 is required for multisession write-once
+ recordings.
+ 
+@@ -146,12 +146,12 @@
+ .SH NOTES
+ If executed under sudo(8) growisofs refuses to start. This is done for
+ the following reason. Naturally growisofs has to access the data set to
+-be recorded to optical media, either indirectly by letting mkisofs
++be recorded to optical media, either indirectly by letting genisoimage
+ generate ISO9660 layout on-the-fly or directly if a pre-mastered image
+ is to be recorded. Being executed under sudo(8), growisofs effectively
+ grants sudoers read access to \fIany\fP file in the file system. The
+-situation is intensified by the fact that growisofs parses MKISOFS
+-environment variable in order to determine alternative path to mkisofs
++situation is intensified by the fact that growisofs parses GENISOIMAGE
++environment variable in order to determine alternative path to genisoimage
+ executable image. This means that being executed under sudo(8),
+ growisofs effectively grants sudoers right to execute program of their
+ choice with elevated privileges. If you for any reason still find the
+@@ -162,13 +162,13 @@
+ .nf
+ 	#!/bin/ksh
+ 	unset SUDO_COMMAND
+-	export MKISOFS=/path/to/trusted/mkisofs
++	export GENISOIMAGE=/path/to/trusted/genisoimage
+ 	exec growisofs "$@"
+ .fi
+ 
+ But note that the recommended alternative to the above "workaround" is
+ actually to install growisofs set\-root\-uid, in which case it will drop
+-privileges prior accessing data or executing mkisofs in order to
++privileges prior accessing data or executing genisoimage in order to
+ preclude unauthorized access to the data.
+ 
+ If the media already carries isofs and \fBgrowisofs\fP is invoked with
+@@ -214,7 +214,7 @@
+ Most up-to-date information on dvd+rw\-tools is available at
+ http://fy.chalmers.se/~appro/linux/DVD+RW/.
+ .PP
+-The manpage for \fBmkisofs\fP.
++The manpage for \fBgenisoimage\fP.
+ 
+ .SH AUTHORS
+ Andy Polyakov <appro@fy.chalmers.se> stands for programming and on-line
+diff -aurN dvd+rw-tools-7.1.orig/growisofs.c dvd+rw-tools-7.1/growisofs.c
+--- dvd+rw-tools-7.1.orig/growisofs.c	2008-04-20 08:18:50.000000000 +0200
++++ dvd+rw-tools-7.1/growisofs.c	2008-04-20 08:29:42.000000000 +0200
+@@ -8,7 +8,7 @@
+  *
+  * Use-it-on-your-own-risk, GPL bless...
+  *
+- * This front-end to mkisofs(8) was originally developed to facilitate
++ * This front-end to genisoimage(8) was originally developed to facilitate
+  * appending of data to ISO9660 volumes residing on random write access
+  * DVD media such as DVD+RW, DVD-RAM, as well as plain files/iso images.
+  * At later stages even support for multi-session recording to DVD
+@@ -580,7 +580,7 @@
+ static volatile struct { time_t zero; off64_t current,final; } progress;
+ 
+ /*
+- * in_fd is passed to mkisofs, out_fd - to pwrite and ioctl_fd - to ioctl.
++ * in_fd is passed to genisoimage, out_fd - to pwrite and ioctl_fd - to ioctl.
+  */
+ static int	in_fd=-1,out_fd=-1;
+ 
+@@ -2712,7 +2712,7 @@
+ }
+ 
+ /*
+- * Setup pipe to mkisofs and start it
++ * Setup pipe to genisoimage and start it
+  */
+ #if defined(__unix) || defined(__unix__)
+ 
+@@ -2724,7 +2724,7 @@
+         perror (":-( unable to create pipe"), exit(FATAL_START(errno));
+ 
+     if ((mkisofs_pid=fork ()) == (pid_t)-1)
+-	perror (":-( unable to fork mkisofs"), exit(FATAL_START(errno));
++	perror (":-( unable to fork genisoimage"), exit(FATAL_START(errno));
+     else if (mkisofs_pid == 0)
+     {	dup2  (fildes[1],1);
+ 	close (fildes[0]);
+@@ -2758,7 +2758,7 @@
+ 
+     n=builtin_dd(fildes[0],outfd,outoff);
+ 
+-    if (n==0) /* mkisofs must have finished, consume the exit code */
++    if (n==0) /* genisoimage must have finished, consume the exit code */
+     {	if ((waitpid (mkisofs_pid,&ret,0)) == -1)
+ 	    perror (":-( waitpid failed"), exit (errno);
+ 
+@@ -2840,11 +2840,11 @@
+ 
+     n=builtin_dd(_open_osfhandle((size_t)hRead,O_RDONLY),outfd,outoff);
+ 
+-    if (n==0) /* mkisofs must have finished, consume the exit code */
++    if (n==0) /* genisoimage must have finished, consume the exit code */
+     { DWORD ret;
+ 
+ 	if (GetExitCodeProcess (pi.hProcess,&ret) && ret)
+-	    fprintf (stderr,":-( mkisofs has failed: %d\n",ret),
++	    fprintf (stderr,":-( genisoimage has failed: %d\n",ret),
+ 	    exit (1);
+ 	else
+ 	    perror (":-( GetExitCodeProcess failed"), exit(errno);
+@@ -2963,8 +2963,8 @@
+ 	perror (NULL), exit (FATAL_START(errno));
+ 
+ #if defined(__unix) || defined(__unix__)
+-    env = getenv ("MKISOFS");
+-    mkisofs_argv[0] = (env?env:"mkisofs");
++    env = getenv ("GENISOIMAGE");
++    mkisofs_argv[0] = (env?env:"genisoimage");
+ #elif defined(_WIN32)
+     /*
+      * On Windows I insist on mkisofs.exe to reside in very same
+@@ -3151,8 +3151,8 @@
+ 	    else if (argv[i][1] == '?' || !strcmp(opt,"-help"))
+ 	    {	PRINT_VERSION (argv[0]);
+ 		printf ("- usage: %s [-dvd-compat] [-overburn] [-speed=1] \\\n"
+-			"         -[ZM] /dev/dvd <mkisofs options>\n",argv[0]);
+-		printf ("  for <mkisofs options> see 'mkisofs %s'\n",opt);
++			"         -[ZM] /dev/dvd <genisoimage options>\n",argv[0]);
++		printf ("  for <genisoimage options> see 'genisoimage %s'\n",opt);
+ 		exit (FATAL_START(EINVAL));
+ 	    }
+ 	    else if (strstr (opt,"-version"))
+@@ -3320,12 +3320,12 @@
+ 
+     if (imgfd<0)
+     {	if (mkisofs_argc==1 && dev_found!='F')
+-	    fprintf (stderr,"%s: no mkisofs options specified, "
++	    fprintf (stderr,"%s: no genisoimage options specified, "
+ 			    "aborting...\n",argv[0]),
+ 	    exit (FATAL_START(EINVAL));
+     }
+     else if ((mkisofs_argc-growisofs_argc)>1)
+-	fprintf (stderr,"%s: no mkisofs options are permitted with =, "
++	fprintf (stderr,"%s: no genisoimage options are permitted with =, "
+ 			"aborting...\n",argv[0]),
+ 	exit (FATAL_START(EINVAL));
+ 
+@@ -3576,7 +3576,7 @@
+ 
+ 	    if (saved_descriptors[i].type[0] != descr[i].type[0])
+ 	    {	fprintf (stderr,":-? volume descriptor mismatch, did you "
+-				"use same mkisofs options?\n");
++				"use same genisoimage options?\n");
+ 		break;
+ 	    }
+ 	    memcpy (descr+i,&saved_descriptors[i],sizeof(*descr));
